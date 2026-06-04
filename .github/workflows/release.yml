@@ -1,0 +1,121 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# A faulty build must never publish: the `android` job that creates the GitHub
+# Release `needs: gate`, so if any check fails, nothing is published. The APK
+# build is itself the final gate — if it fails, the release step never runs.
+
+jobs:
+  gate:
+    name: Gate (typecheck · lint · test · build · cargo)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm exec vite build
+
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libgtk-3-dev libssl-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Cargo check
+        run: cargo check --manifest-path src-tauri/Cargo.toml
+
+  android:
+    name: Build signed APK & publish Release
+    needs: gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # to create the GitHub Release
+    env:
+      # Production frontend config baked into the build.
+      VITE_POCKETBASE_URL: ${{ secrets.VITE_POCKETBASE_URL }}
+      VITE_GITHUB_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK
+        run: sdkmanager "ndk;27.2.12479018"
+
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libgtk-3-dev libssl-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Decode signing keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/release.jks"
+        shell: bash
+
+      - name: Build signed Android APK
+        env:
+          NDK_HOME: ${{ env.ANDROID_NDK_ROOT }}
+          # Read by the Gradle signing config (see build.gradle.kts).
+          FACTORIA_KEYSTORE: ${{ runner.temp }}/release.jks
+          FACTORIA_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          FACTORIA_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          FACTORIA_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: pnpm tauri android build --apk
+
+      - name: Locate APK
+        id: apk
+        run: |
+          path=$(find src-tauri/gen/android -name "*-release.apk" | head -1)
+          echo "path=$path" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.apk.outputs.path }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
