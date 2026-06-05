@@ -25,12 +25,10 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      # Web build first — generates the gitignored src/routeTree.gen.ts that
-      # typecheck depends on.
-      - run: pnpm exec vite build
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
+      - run: pnpm exec vite build
 
       - name: Install Tauri system dependencies
         run: |

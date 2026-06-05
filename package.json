@@ -1,11 +1,11 @@
 {
   "name": "factoria",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && tsc --noEmit",
+    "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "lint": "eslint .",
@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
-    "verify": "vite build && pnpm typecheck && pnpm lint && pnpm test",
+    "verify": "pnpm typecheck && pnpm lint && pnpm test && vite build",
     "prepare": "husky"
   },
   "dependencies": {
