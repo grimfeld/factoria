@@ -1,6 +1,7 @@
 import { fetch } from "@tauri-apps/plugin-http";
 import { writeFile, mkdir, BaseDirectory } from "@tauri-apps/plugin-fs";
 import { openPath } from "@tauri-apps/plugin-opener";
+import { downloadDir } from "@tauri-apps/api/path";
 
 /**
  * Download an APK from GitHub and launch the Android installer (self-hosted
@@ -54,7 +55,6 @@ export async function downloadAndInstallApk(
   await writeFile(fileName, bytes, { baseDir: BaseDirectory.Download });
 
   // Resolve the absolute path and hand off to the Android package installer.
-  const { downloadDir } = await import("@tauri-apps/api/path");
   const abs = `${await downloadDir()}/${fileName}`;
   await openPath(abs);
 }

@@ -1,0 +1,6 @@
+echo "▶ pre-push: running CI gate (typecheck · lint · test · build)…"
+pnpm verify || {
+  echo "✖ pre-push gate failed — push aborted. Fix the above, or bypass with: git push --no-verify"
+  exit 1
+}
+echo "✓ pre-push gate passed"
