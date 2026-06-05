@@ -1,5 +1,5 @@
 import { fetch } from "@tauri-apps/plugin-http";
-import { writeFile, mkdir, BaseDirectory } from "@tauri-apps/plugin-fs";
+import { writeFile, BaseDirectory } from "@tauri-apps/plugin-fs";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { downloadDir } from "@tauri-apps/api/path";
 
@@ -47,14 +47,16 @@ export async function downloadAndInstallApk(
     offset += c.length;
   }
 
-  const dir = "factoria";
-  const fileName = `${dir}/factoria-${version}.apk`;
-  await mkdir(dir, { baseDir: BaseDirectory.Download, recursive: true }).catch(
-    () => {},
-  );
+  // Write flat into the Download dir. We previously nested under a `factoria/`
+  // subdir, but the fs capability scope only grants write (not mkdir) and the
+  // swallowed mkdir failure left the subdir missing, so the install hand-off
+  // opened a path that did not exist.
+  const fileName = `factoria-${version}.apk`;
   await writeFile(fileName, bytes, { baseDir: BaseDirectory.Download });
 
   // Resolve the absolute path and hand off to the Android package installer.
+  // downloadDir() and BaseDirectory.Download resolve to the same app-scoped
+  // Download directory on Android.
   const abs = `${await downloadDir()}/${fileName}`;
   await openPath(abs);
 }
