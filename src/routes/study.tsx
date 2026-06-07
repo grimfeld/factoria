@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Search } from "lucide-react";
 import { resolveStudyPool } from "@/lib/studyPool";
 import {
   buildSessionQueue,
@@ -13,8 +14,16 @@ import { TypedFieldViewer } from "@/components/field/TypedFieldViewer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import type { StudyEntryPoint, Grade } from "@/domain/types";
+import type { StudyEntryPoint, Grade, Topic } from "@/domain/types";
 
 interface StudySearch {
   entry?: "all" | "topic" | "deck" | "tag";
@@ -71,20 +80,12 @@ function EntryPicker() {
 
       {topics.data && topics.data.length > 0 && (
         <Card>
-          <CardContent className="flex flex-col gap-2 p-4">
-            <span className="font-semibold">Topics</span>
-            <div className="flex flex-wrap gap-2">
-              {topics.data.map((t) => (
-                <Button
-                  key={t.id}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => go("topic", t.id)}
-                >
-                  {t.title}
-                </Button>
-              ))}
-            </div>
+          <CardContent className="flex flex-col items-start gap-2 p-4">
+            <span className="font-semibold">A single topic</span>
+            <TopicPicker
+              topics={topics.data}
+              onPick={(id) => go("topic", id)}
+            />
           </CardContent>
         </Card>
       )}
@@ -129,6 +130,77 @@ function EntryPicker() {
         </Card>
       )}
     </div>
+  );
+}
+
+// ---- Searchable topic selector ------------------------------------------
+
+function TopicPicker({
+  topics,
+  onPick,
+}: {
+  topics: Topic[];
+  onPick: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return topics;
+    return topics.filter((t) => t.title.toLowerCase().includes(q));
+  }, [topics, query]);
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setQuery("");
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button variant="outline">
+          <Search className="size-4" /> Pick a topic…
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="flex max-h-[70vh] flex-col gap-3">
+        <DialogHeader>
+          <DialogTitle>Study a single topic</DialogTitle>
+        </DialogHeader>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search topics…"
+            className="pl-8"
+          />
+        </div>
+        <div className="-mx-1 flex flex-col gap-1 overflow-y-auto px-1">
+          {filtered.length === 0 ? (
+            <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+              No topics match.
+            </p>
+          ) : (
+            filtered.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  onPick(t.id);
+                }}
+                className="rounded-md px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+              >
+                {t.title}
+              </button>
+            ))
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
