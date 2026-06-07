@@ -4,10 +4,12 @@ import { useCreateTopic } from "@/lib/hooks";
 import { TitleConflictError } from "@/lib/repos/topics";
 import { newFieldId } from "@/domain/ids";
 
-function errorMessage(err: unknown): string | null {
-  if (!err) return null;
+// Only title conflicts are shown inline (they point at a specific field the
+// user must change). Every other failure is reported via toast from the
+// mutation hook, so we don't double-report or show a stale generic error.
+function inlineError(err: unknown): string | null {
   if (err instanceof TitleConflictError) return err.message;
-  return "Could not save. Please try again.";
+  return null;
 }
 
 export const Route = createFileRoute("/topic/new")({
@@ -33,7 +35,7 @@ function NewTopicPage() {
       <TopicEditor
         initial={blankInitial()}
         saving={create.isPending}
-        errorText={errorMessage(create.error)}
+        errorText={inlineError(create.error)}
         onCancel={() => navigate({ to: "/" })}
         onSave={(state) =>
           create.mutate(state, { onSuccess: () => navigate({ to: "/" }) })
