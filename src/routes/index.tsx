@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Plus, Search, X } from "lucide-react";
+import { GraduationCap, Plus, Search, X } from "lucide-react";
 import { useTopics, useDeleteTopic, useTags, useDecks } from "@/lib/hooks";
 import { activeFieldIds } from "@/domain/questions";
 import { Button } from "@/components/ui/button";
@@ -169,6 +169,14 @@ function TopicCard({ topic }: { topic: Topic }) {
           <Badge variant="secondary">{questionCount} Q</Badge>
         </div>
         <div className="flex items-center gap-2">
+          <Button asChild variant="default" size="sm" disabled={questionCount === 0}>
+            <Link
+              to="/study"
+              search={{ entry: "topic", id: topic.id }}
+            >
+              <GraduationCap className="size-4" /> Study
+            </Link>
+          </Button>
           <Button asChild variant="outline" size="sm">
             <Link to="/topic/$id" params={{ id: topic.id }}>
               Edit
