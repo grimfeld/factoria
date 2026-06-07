@@ -23,7 +23,14 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import type { StudyEntryPoint, Grade, Topic } from "@/domain/types";
+import type {
+  AutoGrade,
+  StudyEntryPoint,
+  Grade,
+  StudyMode,
+  Topic,
+  Question,
+} from "@/domain/types";
 
 interface StudySearch {
   entry?: "all" | "topic" | "deck" | "tag";
@@ -310,12 +317,46 @@ function Session({ entry }: { entry: StudyEntryPoint }) {
       <Card>
         <CardContent className="flex flex-col gap-2 p-6">
           <div className="text-sm text-muted-foreground">
-            recall: <span className="font-semibold">{current.question.fieldLabel}</span>
+            {MODE_LABEL[current.mode]}:{" "}
+            <span className="font-semibold">{current.question.fieldLabel}</span>
           </div>
           <div className="text-2xl font-bold">{current.question.title}</div>
         </CardContent>
       </Card>
 
+      {current.mode === "recall" && <RecallTask key={current.question.fieldId} />}
+      {current.mode === "mcq" && <McqTask key={current.question.fieldId} />}
+      {current.mode === "text-input" && (
+        <TextInputTask key={current.question.fieldId} />
+      )}
+    </div>
+  );
+}
+
+const MODE_LABEL: Record<StudyMode, string> = {
+  recall: "recall",
+  mcq: "pick one",
+  "text-input": "type the answer",
+};
+
+/** The revealed correct value, shared by every auto-graded mode's feedback. */
+function AnswerReveal({ question }: { question: Question }) {
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <span className="text-xs uppercase text-muted-foreground">Answer</span>
+      <TypedFieldViewer type={question.type} value={question.answer} />
+    </div>
+  );
+}
+
+// ---- recall (self-graded, unchanged behaviour) --------------------------
+
+function RecallTask() {
+  const session = useSessionStore();
+  const current = session.queue[session.index];
+
+  return (
+    <>
       <Card>
         <CardContent className="flex min-h-[120px] items-center justify-center p-6 text-center">
           {session.revealed ? (
@@ -346,6 +387,126 @@ function Session({ entry }: { entry: StudyEntryPoint }) {
       ) : (
         <Button onClick={() => session.reveal()}>Reveal</Button>
       )}
-    </div>
+    </>
+  );
+}
+
+// ---- multiple choice (auto-graded) --------------------------------------
+
+function McqTask() {
+  const session = useSessionStore();
+  const current = session.queue[session.index];
+  const choices = current.choices ?? [];
+  const answered = session.result !== null;
+  const correct = current.question.answer;
+
+  return (
+    <>
+      <div className="grid gap-2">
+        {choices.map((choice) => {
+          const isAnswer = choice === correct;
+          const isPicked = choice === session.submitted;
+          return (
+            <Button
+              key={choice}
+              variant="outline"
+              disabled={answered}
+              onClick={() => session.answer(choice)}
+              className={cn(
+                "h-auto justify-start whitespace-normal py-3 text-left",
+                answered && isAnswer && "border-green-600 bg-green-600/10",
+                answered &&
+                  isPicked &&
+                  !isAnswer &&
+                  "border-red-600 bg-red-600/10",
+              )}
+            >
+              {choice}
+            </Button>
+          );
+        })}
+      </div>
+
+      {answered && (
+        <AutoFeedback
+          result={session.result!}
+          question={current.question}
+          onNext={() => session.next()}
+        />
+      )}
+    </>
+  );
+}
+
+// ---- text input (auto-graded) -------------------------------------------
+
+function TextInputTask() {
+  const session = useSessionStore();
+  const current = session.queue[session.index];
+  const [value, setValue] = useState("");
+  const answered = session.result !== null;
+
+  const submit = () => {
+    if (answered || value.trim() === "") return;
+    session.answer(value);
+  };
+
+  return (
+    <>
+      <Card>
+        <CardContent className="p-6">
+          <Input
+            autoFocus
+            value={value}
+            disabled={answered}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submit();
+            }}
+            placeholder="Type the answer, then press Enter"
+          />
+        </CardContent>
+      </Card>
+
+      {answered ? (
+        <AutoFeedback
+          result={session.result!}
+          question={current.question}
+          onNext={() => session.next()}
+        />
+      ) : (
+        <Button onClick={submit} disabled={value.trim() === ""}>
+          Check
+        </Button>
+      )}
+    </>
+  );
+}
+
+/** Right/wrong banner + revealed answer + Continue, shared by auto modes. */
+function AutoFeedback({
+  result,
+  question,
+  onNext,
+}: {
+  result: AutoGrade;
+  question: Question;
+  onNext: () => void;
+}) {
+  return (
+    <Card>
+      <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
+        <span
+          className={cn(
+            "font-semibold",
+            result === "correct" ? "text-green-600" : "text-red-600",
+          )}
+        >
+          {result === "correct" ? "Correct" : "Not quite"}
+        </span>
+        {result === "wrong" && <AnswerReveal question={question} />}
+        <Button onClick={onNext}>Continue</Button>
+      </CardContent>
+    </Card>
   );
 }
