@@ -127,9 +127,10 @@ typed-answer checking and no multiple choice — recall is always self-graded.
 
 ### Study entry point
 
-The three ways to start a study session: a **Deck** (its Fields' Questions), a
-**Tag** (the Questions of all Fields carrying it), or **All** (every Question in
-the library). Each resolves to a pool of Questions to drill.
+The ways to start a study session: a single **Topic** (its Questions), a
+**Deck** (its Fields' Questions), a **Tag** (the Questions of all Fields
+carrying it), or **All** (every Question in the library). Each resolves to a
+pool of Questions to drill.
 
 ### Review state
 

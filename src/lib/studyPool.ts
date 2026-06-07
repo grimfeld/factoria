@@ -1,4 +1,4 @@
-import { listTopics, listTopicsByTag } from "./repos/topics";
+import { getTopic, listTopics, listTopicsByTag } from "./repos/topics";
 import { getDeck } from "./repos/decks";
 import { listReviewStatesForTopics } from "./repos/review";
 import { deriveQuestions } from "@/domain/questions";
@@ -12,9 +12,10 @@ import type {
 /**
  * Resolve a Study entry point to a pool of Questions plus the Review state for
  * the Topics they come from (ADR-0008):
- *   - all  → every Question in the library
- *   - tag  → Questions of Fields carrying the tag
- *   - deck → Questions of the Fields in the Deck
+ *   - all   → every Question in the library
+ *   - topic → every Question in a single Topic
+ *   - tag   → Questions of Fields carrying the tag
+ *   - deck  → Questions of the Fields in the Deck
  */
 export async function resolveStudyPool(
   entry: StudyEntryPoint,
@@ -25,6 +26,9 @@ export async function resolveStudyPool(
   switch (entry.kind) {
     case "all":
       topics = await listTopics();
+      break;
+    case "topic":
+      topics = [await getTopic(entry.topicId)];
       break;
     case "tag": {
       topics = await listTopicsByTag(entry.tag);
