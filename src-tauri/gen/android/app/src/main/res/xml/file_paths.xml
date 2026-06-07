@@ -2,4 +2,11 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
   <external-path name="my_images" path="." />
   <cache-path name="my_cache_images" path="." />
+  <!--
+    The in-app updater writes the downloaded APK to the app-specific external
+    Download dir, which Tauri resolves via getExternalFilesDir(DIRECTORY_DOWNLOADS)
+    to .../Android/data/<appId>/files/Download. external-files-path maps that root
+    so FileProvider.getUriForFile can mint a content:// URI for the installer.
+  -->
+  <external-files-path name="downloads" path="Download" />
 </paths>

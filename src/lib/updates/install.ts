@@ -1,6 +1,6 @@
 import { fetch } from "@tauri-apps/plugin-http";
 import { writeFile, BaseDirectory } from "@tauri-apps/plugin-fs";
-import { openPath } from "@tauri-apps/plugin-opener";
+import { invoke } from "@tauri-apps/api/core";
 import { downloadDir } from "@tauri-apps/api/path";
 
 /**
@@ -54,9 +54,12 @@ export async function downloadAndInstallApk(
   const fileName = `factoria-${version}.apk`;
   await writeFile(fileName, bytes, { baseDir: BaseDirectory.Download });
 
-  // Resolve the absolute path and hand off to the Android package installer.
-  // downloadDir() and BaseDirectory.Download resolve to the same app-scoped
-  // Download directory on Android.
+  // Resolve the absolute path and hand off to the Android package installer via
+  // our own `install_apk` command. The stock opener's open_path is broken on
+  // Android (sends a bare String to a Kotlin command expecting an object) and
+  // never builds a FileProvider install Intent, so we do it ourselves in Rust +
+  // Kotlin (see src-tauri InstallerPlugin). downloadDir() and
+  // BaseDirectory.Download resolve to the same app-scoped Download dir.
   const abs = `${await downloadDir()}/${fileName}`;
-  await openPath(abs);
+  await invoke("install_apk", { path: abs });
 }
