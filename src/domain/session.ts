@@ -1,5 +1,5 @@
 import { deriveQuestions } from "./questions";
-import { buildMcqChoices, pickMode } from "./modes";
+import { buildMcqChoices, pickMode, type Rand } from "./modes";
 import { isDue } from "./scheduler";
 import type { StudyMode, Topic, ReviewState, Question } from "./types";
 
@@ -14,8 +14,8 @@ export interface ScheduledQuestion {
 /**
  * A queue item ready to drill (ADR-0011): a {@link ScheduledQuestion} plus the
  * presentation {@link StudyMode} chosen for this review and, for `mcq`, the
- * shuffled options. The mode rotates with the Question's review count; `choices`
- * is non-null only when `mode === "mcq"`.
+ * shuffled options. The mode is picked at random per review; `choices` is
+ * non-null only when `mode === "mcq"`.
  */
 export interface StudyTask extends ScheduledQuestion {
   mode: StudyMode;
@@ -25,8 +25,8 @@ export interface StudyTask extends ScheduledQuestion {
 /**
  * Attach the per-review presentation mode (and MCQ choices) to a scheduled
  * Question. `pool` is every Question in the session — the source of sibling
- * distractors. The rotation seed is the Question's review count; cram has no
- * Review state, so callers pass a positional seed to keep modes varied there.
+ * distractors. The mode is chosen at random via the injected {@link Rand}
+ * (callers pass `Math.random`; tests pass a stub).
  *
  * If `mcq` is picked but choices can't be built (too few distractors), the task
  * falls back to `recall` — never a broken MCQ.
@@ -34,11 +34,11 @@ export interface StudyTask extends ScheduledQuestion {
 export function toStudyTask(
   sq: ScheduledQuestion,
   pool: Question[],
-  seed: number,
+  rand: Rand = Math.random,
 ): StudyTask {
-  const mode = pickMode(sq.question, pool, seed);
+  const mode = pickMode(sq.question, pool, rand);
   if (mode !== "mcq") return { ...sq, mode, choices: null };
-  const choices = buildMcqChoices(sq.question, pool, seed);
+  const choices = buildMcqChoices(sq.question, pool, rand);
   return choices
     ? { ...sq, mode, choices }
     : { ...sq, mode: "recall", choices: null };
@@ -58,6 +58,7 @@ export function buildSessionQueue(
   reviewStates: ReviewState[],
   now: Date,
   newCap: number = DEFAULT_NEW_PER_DAY,
+  rand: Rand = Math.random,
 ): StudyTask[] {
   const rsByField = new Map(reviewStates.map((rs) => [rs.fieldId, rs]));
 
@@ -80,22 +81,22 @@ export function buildSessionQueue(
   );
 
   const queue = [...due, ...fresh.slice(0, Math.max(0, newCap))];
-  // Mode rotates with each Question's own review count; New Questions (reps 0)
-  // start at `recall`. The whole queue is the distractor pool.
-  return queue.map((sq) =>
-    toStudyTask(sq, questions, sq.reviewState?.reps ?? 0),
-  );
+  // Mode is picked at random per Question; the whole queue is the distractor
+  // pool. `rand` is injectable for tests (defaults to Math.random).
+  return queue.map((sq) => toStudyTask(sq, questions, rand));
 }
 
 /**
  * Cram queue: every Question in the pool, ignoring the schedule. Ratings during
- * cram do not change Review state (CONTEXT.md → Study session). Cram has no
- * Review state to seed mode rotation, so position in the queue is used instead
- * — varying the modes across a cram run without touching the schedule.
+ * cram do not change Review state (CONTEXT.md → Study session). Modes are still
+ * picked at random per Question.
  */
-export function buildCramQueue(questions: Question[]): StudyTask[] {
-  return questions.map((question, i) =>
-    toStudyTask({ question, reviewState: null }, questions, i),
+export function buildCramQueue(
+  questions: Question[],
+  rand: Rand = Math.random,
+): StudyTask[] {
+  return questions.map((question) =>
+    toStudyTask({ question, reviewState: null }, questions, rand),
   );
 }
 

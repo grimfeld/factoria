@@ -66,54 +66,84 @@ describe("eligibleModes", () => {
   });
 });
 
+/** Stub Rand returning a fixed value (for deterministic index picks). */
+const always = (v: number) => () => v;
+/** Stub Rand yielding successive values, then repeating the last. */
+const seq = (vals: number[]) => {
+  let i = 0;
+  return () => vals[Math.min(i++, vals.length - 1)];
+};
+
 describe("pickMode", () => {
-  it("New Question (reps 0) starts at recall", () => {
-    expect(pickMode(capitals[0], capitals, 0)).toBe("recall");
+  it("picks the eligible mode at the rand-chosen index", () => {
+    // eligible = [recall, mcq, text-input]; randInt = floor(rand*3)
+    expect(pickMode(capitals[0], capitals, always(0))).toBe("recall");
+    expect(pickMode(capitals[0], capitals, always(0.5))).toBe("mcq");
+    expect(pickMode(capitals[0], capitals, always(0.9))).toBe("text-input");
   });
 
-  it("rotates deterministically through eligible modes", () => {
-    const seen = [0, 1, 2, 3].map((r) => pickMode(capitals[0], capitals, r));
-    expect(seen).toEqual(["recall", "mcq", "text-input", "recall"]);
-  });
-
-  it("rotation only spans eligible modes when mcq unavailable", () => {
+  it("only ever returns an eligible mode (mcq excluded when unavailable)", () => {
     const pool = [q("f1", "capital", "Paris"), q("f2", "capital", "Berlin")];
-    const seen = [0, 1, 2].map((r) => pickMode(pool[0], pool, r));
-    expect(seen).toEqual(["recall", "text-input", "recall"]);
+    // eligible = [recall, text-input]; index 1 → text-input, never mcq
+    expect(pickMode(pool[0], pool, always(0.9))).toBe("text-input");
+    expect(pickMode(pool[0], pool, always(0))).toBe("recall");
   });
 
-  it("is stable regardless of negative/fractional reps", () => {
-    expect(pickMode(capitals[0], capitals, -5)).toBe("recall");
-    expect(pickMode(capitals[0], capitals, 1.9)).toBe("mcq");
+  it("image Field is always recall regardless of rand", () => {
+    const img = q("f9", "flag", "media123", "image");
+    expect(pickMode(img, [img, ...capitals], always(0.99))).toBe("recall");
+  });
+
+  it("is observed to span all eligible modes over many rolls", () => {
+    let n = 0;
+    const rand = () => [0, 0.5, 0.9][n++ % 3];
+    const seen = new Set(
+      Array.from({ length: 9 }, () => pickMode(capitals[0], capitals, rand)),
+    );
+    expect(seen).toEqual(new Set(["recall", "mcq", "text-input"]));
   });
 });
 
 describe("buildMcqChoices", () => {
   it("includes the correct answer plus distractors, capped at 4", () => {
-    const choices = buildMcqChoices(capitals[0], capitals, 1);
+    const choices = buildMcqChoices(capitals[0], capitals, Math.random);
     expect(choices).not.toBeNull();
     expect(choices!.length).toBe(4);
     expect(choices).toContain("Paris");
-    // every option is a real sibling answer
-    expect(new Set(choices)).toEqual(new Set(["Paris", "Berlin", "Madrid", "Rome"]));
+    // every option is a real sibling answer (pool has exactly 4)
+    expect(new Set(choices)).toEqual(
+      new Set(["Paris", "Berlin", "Madrid", "Rome"]),
+    );
+  });
+
+  it("samples a random subset when more distractors than slots exist", () => {
+    const big = [
+      q("f1", "capital", "Paris"),
+      q("f2", "capital", "Berlin"),
+      q("f3", "capital", "Madrid"),
+      q("f4", "capital", "Rome"),
+      q("f5", "capital", "Vienna"),
+      q("f6", "capital", "Lisbon"),
+    ];
+    const choices = buildMcqChoices(big[0], big, seq([0.1, 0.7, 0.3, 0.9]))!;
+    expect(choices.length).toBe(4);
+    expect(choices).toContain("Paris");
+    // distinct options only
+    expect(new Set(choices).size).toBe(4);
   });
 
   it("returns null when too few distractors", () => {
     const pool = [q("f1", "capital", "Paris"), q("f2", "capital", "Berlin")];
-    expect(buildMcqChoices(pool[0], pool, 0)).toBeNull();
+    expect(buildMcqChoices(pool[0], pool, Math.random)).toBeNull();
   });
 
-  it("is deterministic for a given seed", () => {
-    expect(buildMcqChoices(capitals[0], capitals, 2)).toEqual(
-      buildMcqChoices(capitals[0], capitals, 2),
+  it("places the correct answer in different slots across rolls", () => {
+    const slots = new Set(
+      Array.from({ length: 20 }, () =>
+        buildMcqChoices(capitals[0], capitals, Math.random)!.indexOf("Paris"),
+      ),
     );
-  });
-
-  it("places the correct answer in different slots across seeds", () => {
-    const slots = [0, 1, 2, 3].map((s) =>
-      buildMcqChoices(capitals[0], capitals, s)!.indexOf("Paris"),
-    );
-    expect(new Set(slots).size).toBeGreaterThan(1);
+    expect(slots.size).toBeGreaterThan(1);
   });
 });
 

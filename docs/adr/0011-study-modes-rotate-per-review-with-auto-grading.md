@@ -28,15 +28,18 @@ changing how Topics are entered.
 - Modes: `recall` (self-graded, unchanged), `mcq`, `text-input` (both
   auto-graded). Only `text` Fields are eligible for `mcq`/`text-input`;
   `image`/`audio` Fields are always `recall` (their value is a Media id).
-- **Rotation** is deterministic, seeded by the Question's review count (`reps`):
-  a New Question (reps 0) is introduced by `recall`, then cycles through the
-  eligible modes. No randomness — rotation and MCQ option order are reproducible
-  and unit-tested. (Cram has no Review state, so queue position seeds it.)
+- **Mode selection** is **random**: each review independently picks uniformly
+  among the eligible modes, so the same Field is drilled different ways over time
+  rather than cycling in a fixed order. Randomness is *injected* as a
+  `rand: () => number` so the selection functions stay pure and unit-testable
+  (runtime passes `Math.random`; tests pass a stub).
 - **MCQ distractors** are sibling answers from the **session pool** — other
   Questions sharing the same Field label. Because the pool is already scoped by
   the entry point, a Deck/Tag session draws distractors only from that Deck/Tag.
-  `mcq` is offered only when at least two distinct distractors exist; otherwise
-  the review falls back to `recall`/`text-input`.
+  Distractors are **sampled at random** (not the first few), and the options —
+  including the correct answer — are **shuffled**. `mcq` is offered only when at
+  least two distinct distractors exist; otherwise the review falls back to
+  `recall`/`text-input`.
 - **Auto-grading** maps to the scheduler: `correct → good`, `wrong → again`.
   The finer Hard/Easy gradations stay exclusive to `recall`. `text-input` is
   matched after normalization (case-, whitespace-, surrounding-punctuation-, and
@@ -46,7 +49,11 @@ changing how Topics are entered.
 ## Considered options
 
 - **Author-set mode per Field** — predictable, but adds authoring burden and a
-  schema change. Rejected in favour of zero-author-cost rotation.
+  schema change. Rejected in favour of zero-author-cost random selection.
+- **Fixed rotation seeded by review count** — reproducible and recall-first for
+  New Questions, but felt mechanical: the next mode was predictable and MCQ
+  reused the same distractors every time. Rejected in favour of random selection
+  and random distractor sampling.
 - **Auto-check then still self-grade** — keeps the 4-button scale but adds
   friction and lets the user override the machine. Rejected: the point of the
   auto modes is lower-friction, trustworthy grading.
@@ -64,4 +71,4 @@ changing how Topics are entered.
   mapping.
 - CONTEXT.md → Grading no longer holds as written; see the **Study mode** entry.
 - A Field with no same-label siblings (e.g. a unique attribute) simply never
-  shows MCQ; it rotates `recall` ↔ `text-input`.
+  shows MCQ; it alternates randomly between `recall` and `text-input`.

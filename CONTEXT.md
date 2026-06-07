@@ -135,16 +135,17 @@ How a Question is scored. It depends on the **Study mode** (ADR-0011):
 
 How a Question is presented and graded for a single review (ADR-0011), distinct
 from the Field **Type** (what the content *is*). One of **recall**, **mcq**, or
-**text-input**. The mode is chosen per review and **never stored** — it rotates
-deterministically with the Question's review count, so a New Question is always
-introduced by `recall`, then cycles through the eligible modes.
+**text-input**. The mode is chosen **at random** among the eligible ones per
+review and **never stored**, so the same Field is drilled different ways over
+time.
 
 Only **text** Fields are eligible for `mcq`/`text-input`; **image**/**audio**
 Fields are always `recall` (their value is a Media id, not checkable). **mcq**
-distractors are sibling answers from the session pool — other Questions sharing
-the same Field label — so a Deck or Tag session draws distractors only from that
-pool. When too few distractors exist, that review falls back to another eligible
-mode. (Cloze is not yet a mode — deferred in ADR-0011.)
+distractors are sibling answers sampled at random from the session pool — other
+Questions sharing the same Field label — so a Deck or Tag session draws
+distractors only from that pool, and the options (including the correct one) are
+shuffled. When too few distractors exist, that review falls back to another
+eligible mode. (Cloze is not yet a mode — deferred in ADR-0011.)
 
 ### Study entry point
 
