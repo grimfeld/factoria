@@ -3,10 +3,10 @@ import { TopicEditor, type EditorState } from "@/components/TopicEditor";
 import { useTopic, useUpdateTopic } from "@/lib/hooks";
 import { TitleConflictError } from "@/lib/repos/topics";
 
-function errorMessage(err: unknown): string | null {
-  if (!err) return null;
+// Only title conflicts show inline; other failures toast from the hook.
+function inlineError(err: unknown): string | null {
   if (err instanceof TitleConflictError) return err.message;
-  return "Could not save. Please try again.";
+  return null;
 }
 
 export const Route = createFileRoute("/topic/$id")({
@@ -33,7 +33,7 @@ function EditTopicPage() {
       <TopicEditor
         initial={initial}
         saving={update.isPending}
-        errorText={errorMessage(update.error)}
+        errorText={inlineError(update.error)}
         onCancel={() => navigate({ to: "/" })}
         onSave={(state, resetFieldIds) =>
           update.mutate(

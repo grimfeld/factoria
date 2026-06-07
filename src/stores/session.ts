@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { toast } from "sonner";
 import type { Grade } from "@/domain/types";
 import type { ScheduledQuestion } from "@/domain/session";
 import { gradeReviewState } from "@/lib/repos/review";
@@ -34,9 +35,18 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const current = queue[index];
     if (!current) return;
 
-    // Real sessions persist SM-2; cram leaves Review state untouched.
+    // Real sessions persist SM-2; cram leaves Review state untouched. If the
+    // persist fails we still advance — blocking the session on a flaky write
+    // would feel like the grade button is broken — and warn the user that this
+    // one card's schedule may not have saved.
     if (!cram && current.reviewState) {
-      await gradeReviewState(current.reviewState, grade);
+      try {
+        await gradeReviewState(current.reviewState, grade);
+      } catch {
+        toast.warning(
+          "Couldn't save this card's progress — it may come up again sooner than expected.",
+        );
+      }
     }
 
     set((s) => ({
