@@ -18,6 +18,26 @@ export class TitleConflictError extends Error {
   }
 }
 
+/**
+ * Thrown when the primary Topic write SUCCEEDED but a follow-up step (review
+ * reconcile or Deck-membership sync) failed. The Topic is already persisted, so
+ * callers should treat this as a non-fatal warning — NOT a "could not save"
+ * error. This is the fix for the UI hallucinating failures on saves that the DB
+ * actually accepted: the topic row lands first, and a flaky follow-up write must
+ * not masquerade as a total failure.
+ */
+export class PostSaveWarning extends Error {
+  constructor(
+    public readonly topic: Topic,
+    public readonly cause: unknown,
+  ) {
+    super(
+      "Saved, but syncing review schedule or deck membership ran into a problem. Your changes are stored; a refresh should reconcile everything.",
+    );
+    this.name = "PostSaveWarning";
+  }
+}
+
 /** Canonical form for Title comparison and storage (trimmed). */
 export function normalizeTitle(title: string): string {
   return title.trim();
@@ -75,8 +95,14 @@ export async function createTopic(
     .collection("topics")
     .create({ owner, ...input, title });
   const topic = toTopic(row);
-  await reconcileOnSave(topic, now);
-  await syncFieldDeckMembership(topic);
+  // Primary write done. Follow-ups are best-effort: a failure here means the
+  // Topic exists but its schedule/decks lag — a warning, not a save failure.
+  try {
+    await reconcileOnSave(topic, now);
+    await syncFieldDeckMembership(topic);
+  } catch (cause) {
+    throw new PostSaveWarning(topic, cause);
+  }
   return topic;
 }
 
@@ -97,20 +123,32 @@ export async function updateTopic(
   if (await titleExists(title, id)) throw new TitleConflictError(title);
   const row = await pb.collection("topics").update(id, { ...input, title });
   const topic = toTopic(row);
-  await reconcileOnSave(topic, now);
-  await syncFieldDeckMembership(topic);
-  if (opts.resetFieldIds?.length) {
-    await resetReviewStateForFields(topic.id, opts.resetFieldIds, now);
+  // Primary write done — see createTopic for why follow-ups are non-fatal.
+  try {
+    await reconcileOnSave(topic, now);
+    await syncFieldDeckMembership(topic);
+    if (opts.resetFieldIds?.length) {
+      await resetReviewStateForFields(topic.id, opts.resetFieldIds, now);
+    }
+  } catch (cause) {
+    throw new PostSaveWarning(topic, cause);
   }
   return topic;
 }
 
 export async function deleteTopic(id: string): Promise<void> {
   const fieldIds = (await getTopic(id)).fields.map((f) => f.id);
-  // review_state rows cascade-delete via the topic relation; Deck membership
-  // has no FK, so purge it explicitly (ADR-0008).
-  await removeFieldsFromAllDecks(fieldIds);
+  // Delete the Topic first (the primary, user-visible effect). review_state
+  // rows cascade-delete via the topic relation; Deck membership has no FK, so
+  // purge it explicitly (ADR-0008). The purge is best-effort: if it fails the
+  // Topic is already gone, so a stale deck reference must not surface as a
+  // "delete failed" error for an action that DID happen.
   await pb.collection("topics").delete(id);
+  try {
+    await removeFieldsFromAllDecks(fieldIds);
+  } catch (cause) {
+    throw new PostSaveWarning({ id } as Topic, cause);
+  }
 }
 
 async function reconcileOnSave(topic: Topic, now: Date): Promise<void> {
