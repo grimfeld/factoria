@@ -69,6 +69,22 @@ export interface Question {
 export type Grade = "again" | "hard" | "good" | "easy";
 
 /**
+ * How a Question is presented and graded for a single review (ADR-0011).
+ * Orthogonal to {@link FieldType} (what the content *is*): a `text` Field can be
+ * drilled by `recall`, `mcq`, or `text-input`; `image`/`audio` Fields are always
+ * `recall` (their value isn't machine-checkable). The mode is chosen per review,
+ * never stored — it rotates with the Question's review count (CONTEXT.md →
+ * Study mode).
+ */
+export type StudyMode = "recall" | "mcq" | "text-input";
+
+/**
+ * The outcome of an auto-checked answer (`mcq`/`text-input`). Maps to a
+ * {@link Grade} for the scheduler: `correct → good`, `wrong → again`.
+ */
+export type AutoGrade = "correct" | "wrong";
+
+/**
  * Spaced-repetition memory of a single Question, keyed by Field id (ADR-0006).
  * SM-2-lite. Dates are ISO strings to match PocketBase storage.
  */

@@ -120,10 +120,31 @@ _Avoid_: collection-of-Topics (Decks hold Fields, not whole Topics).
 
 ### Grading
 
-How a Question is scored. The user is shown the Title and Field label, recalls
-the answer from memory, then flips to reveal the Field value and rates their own
-recall on a 4-button scale: **Again / Hard / Good / Easy**. There is no
-typed-answer checking and no multiple choice — recall is always self-graded.
+How a Question is scored. It depends on the **Study mode** (ADR-0011):
+
+- **recall** — the user is shown the Title and Field label, recalls the answer
+  from memory, then flips to reveal the Field value and rates their own recall on
+  a 4-button scale: **Again / Hard / Good / Easy**. Self-graded.
+- **mcq** / **text-input** — the answer is machine-checked and **auto-graded**:
+  `correct → good`, `wrong → again`. The finer Hard/Easy ratings exist only in
+  `recall`. Text input is matched leniently on case, whitespace, surrounding
+  punctuation, and Markdown emphasis, but not on spelling — there is no fuzzy
+  matching.
+
+### Study mode
+
+How a Question is presented and graded for a single review (ADR-0011), distinct
+from the Field **Type** (what the content *is*). One of **recall**, **mcq**, or
+**text-input**. The mode is chosen per review and **never stored** — it rotates
+deterministically with the Question's review count, so a New Question is always
+introduced by `recall`, then cycles through the eligible modes.
+
+Only **text** Fields are eligible for `mcq`/`text-input`; **image**/**audio**
+Fields are always `recall` (their value is a Media id, not checkable). **mcq**
+distractors are sibling answers from the session pool — other Questions sharing
+the same Field label — so a Deck or Tag session draws distractors only from that
+pool. When too few distractors exist, that review falls back to another eligible
+mode. (Cloze is not yet a mode — deferred in ADR-0011.)
 
 ### Study entry point
 
