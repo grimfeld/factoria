@@ -112,8 +112,9 @@ export interface Deck {
   fields: string[]; // field ids
 }
 
-/** The three ways to start a study session (CONTEXT.md → Study entry point). */
+/** The ways to start a study session (CONTEXT.md → Study entry point). */
 export type StudyEntryPoint =
   | { kind: "all" }
+  | { kind: "topic"; topicId: string }
   | { kind: "deck"; deckId: string }
   | { kind: "tag"; tag: string };

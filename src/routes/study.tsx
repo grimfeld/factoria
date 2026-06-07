@@ -8,7 +8,7 @@ import {
   poolCounts,
 } from "@/domain/session";
 import { useSessionStore } from "@/stores/session";
-import { useDecks, useTags } from "@/lib/hooks";
+import { useDecks, useTags, useTopics } from "@/lib/hooks";
 import { TypedFieldViewer } from "@/components/field/TypedFieldViewer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import type { StudyEntryPoint, Grade } from "@/domain/types";
 
 interface StudySearch {
-  entry?: "all" | "deck" | "tag";
+  entry?: "all" | "topic" | "deck" | "tag";
   id?: string;
 }
 
@@ -31,6 +31,7 @@ export const Route = createFileRoute("/study")({
 
 function toEntryPoint(s: StudySearch): StudyEntryPoint | null {
   if (s.entry === "all") return { kind: "all" };
+  if (s.entry === "topic" && s.id) return { kind: "topic", topicId: s.id };
   if (s.entry === "deck" && s.id) return { kind: "deck", deckId: s.id };
   if (s.entry === "tag" && s.id) return { kind: "tag", tag: s.id };
   return null;
@@ -46,6 +47,7 @@ function StudyPage() {
 
 function EntryPicker() {
   const navigate = useNavigate();
+  const topics = useTopics();
   const decks = useDecks();
   const tags = useTags();
 
@@ -66,6 +68,26 @@ function EntryPicker() {
           <Button onClick={() => go("all")}>Study all topics</Button>
         </CardContent>
       </Card>
+
+      {topics.data && topics.data.length > 0 && (
+        <Card>
+          <CardContent className="flex flex-col gap-2 p-4">
+            <span className="font-semibold">Topics</span>
+            <div className="flex flex-wrap gap-2">
+              {topics.data.map((t) => (
+                <Button
+                  key={t.id}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => go("topic", t.id)}
+                >
+                  {t.title}
+                </Button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {decks.data && decks.data.length > 0 && (
         <Card>
