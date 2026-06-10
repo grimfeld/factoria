@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import * as topicsRepo from "./repos/topics";
 import * as decksRepo from "./repos/decks";
 import * as templatesRepo from "./repos/templates";
+import * as conversationsRepo from "./repos/conversations";
 import {
   PostSaveWarning,
   TitleConflictError,
@@ -51,6 +52,8 @@ export const qk = {
   decks: ["decks"] as const,
   deck: (id: string) => ["decks", id] as const,
   templates: ["templates"] as const,
+  conversations: ["conversations"] as const,
+  conversation: (id: string) => ["conversations", id] as const,
 };
 
 // ---- Topics -------------------------------------------------------------
@@ -220,5 +223,26 @@ export function useDeleteTemplate() {
       toast.success("Template deleted.");
     },
     onError: (err) => notifyWriteError(err, "Could not delete template."),
+  });
+}
+
+// ---- Conversations ------------------------------------------------------
+
+export function useConversations() {
+  return useQuery({
+    queryKey: qk.conversations,
+    queryFn: conversationsRepo.listConversations,
+  });
+}
+
+export function useDeleteConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => conversationsRepo.deleteConversation(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.conversations });
+      toast.success("Conversation deleted.");
+    },
+    onError: (err) => notifyWriteError(err, "Could not delete conversation."),
   });
 }

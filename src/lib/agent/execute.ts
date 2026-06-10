@@ -1,4 +1,9 @@
-import { createTopic, getTopic, updateTopic } from "@/lib/repos/topics";
+import {
+  createTopic,
+  getTopic,
+  updateTopic,
+  PostSaveWarning,
+} from "@/lib/repos/topics";
 import { createDeck } from "@/lib/repos/decks";
 import { TEMP_DECK_PREFIX, type PendingWrite } from "./types";
 import type { ImportPlan } from "@/domain/import";
@@ -8,7 +13,14 @@ export interface ExecutionResult {
   extended: number;
   skipped: number;
   decksCreated: number;
+  /** Hard failures — the primary write did NOT land. */
   errors: { title: string; error: string }[];
+  /**
+   * Soft failures — the primary write landed but a follow-up (schedule/deck
+   * sync) hiccuped (PostSaveWarning). These count as successes for created/
+   * extended; they must NOT be reported as "did nothing" (write-then-warn).
+   */
+  warnings: { title: string; warning: string }[];
 }
 
 /**
@@ -30,6 +42,7 @@ export async function executePendingWrites(
     skipped: 0,
     decksCreated: 0,
     errors: [],
+    warnings: [],
   };
 
   // Phase 1: create decks, map temp ids to real ids.
@@ -65,7 +78,30 @@ export async function executePendingWrites(
           await createTopic({ title: write.title, fields: write.fields });
           out.created++;
         } catch (err) {
-          out.errors.push({ title: write.title, error: msg(err) });
+          if (!recordSoft(err, write.title, out)) {
+            out.errors.push({ title: write.title, error: msg(err) });
+          } else {
+            out.created++;
+          }
+        }
+        break;
+
+      case "renameTopic":
+        try {
+          const topic = await getTopic(write.topicId);
+          // Title-only change: keep fields as-is, no resetFieldIds, so every
+          // Field id and its Review state survive (ADR-0009 / CONTEXT.md).
+          await updateTopic(write.topicId, {
+            title: write.toTitle,
+            fields: topic.fields,
+          });
+          out.extended++;
+        } catch (err) {
+          if (!recordSoft(err, write.toTitle, out)) {
+            out.errors.push({ title: write.toTitle, error: msg(err) });
+          } else {
+            out.extended++;
+          }
         }
         break;
 
@@ -78,7 +114,11 @@ export async function executePendingWrites(
           });
           out.extended++;
         } catch (err) {
-          out.errors.push({ title: write.topicTitle, error: msg(err) });
+          if (!recordSoft(err, write.topicTitle, out)) {
+            out.errors.push({ title: write.topicTitle, error: msg(err) });
+          } else {
+            out.extended++;
+          }
         }
         break;
 
@@ -97,7 +137,11 @@ export async function executePendingWrites(
           );
           out.extended++;
         } catch (err) {
-          out.errors.push({ title: write.topicId, error: msg(err) });
+          if (!recordSoft(err, write.topicId, out)) {
+            out.errors.push({ title: write.topicId, error: msg(err) });
+          } else {
+            out.extended++;
+          }
         }
         break;
 
@@ -112,7 +156,11 @@ export async function executePendingWrites(
           });
           out.extended++;
         } catch (err) {
-          out.errors.push({ title: write.topicTitle, error: msg(err) });
+          if (!recordSoft(err, write.topicTitle, out)) {
+            out.errors.push({ title: write.topicTitle, error: msg(err) });
+          } else {
+            out.extended++;
+          }
         }
         break;
 
@@ -131,7 +179,11 @@ export async function executePendingWrites(
           });
           out.extended++;
         } catch (err) {
-          out.errors.push({ title: write.topicTitle, error: msg(err) });
+          if (!recordSoft(err, write.topicTitle, out)) {
+            out.errors.push({ title: write.topicTitle, error: msg(err) });
+          } else {
+            out.extended++;
+          }
         }
         break;
     }
@@ -153,7 +205,11 @@ async function executeImportPlan(
       });
       out.created++;
     } catch (err) {
-      out.errors.push({ title: op.title, error: msg(err) });
+      if (!recordSoft(err, op.title, out)) {
+        out.errors.push({ title: op.title, error: msg(err) });
+      } else {
+        out.created++;
+      }
     }
   }
   for (const op of plan.extend) {
@@ -168,7 +224,11 @@ async function executeImportPlan(
       });
       out.extended++;
     } catch (err) {
-      out.errors.push({ title: op.title, error: msg(err) });
+      if (!recordSoft(err, op.title, out)) {
+        out.errors.push({ title: op.title, error: msg(err) });
+      } else {
+        out.extended++;
+      }
     }
   }
   out.skipped += plan.skip.length;
@@ -176,4 +236,23 @@ async function executeImportPlan(
 
 function msg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * Classify a thrown write error (write-then-warn). A {@link PostSaveWarning}
+ * means the primary record DID land — only a follow-up (schedule/deck sync)
+ * hiccuped. Record it as a warning and return true so the caller still counts
+ * the write as a success, instead of reporting "0 changes, 1 error" for a save
+ * that actually worked. Any other error is a real failure → return false.
+ */
+function recordSoft(
+  err: unknown,
+  title: string,
+  out: ExecutionResult,
+): boolean {
+  if (err instanceof PostSaveWarning) {
+    out.warnings.push({ title, warning: err.message });
+    return true;
+  }
+  return false;
 }

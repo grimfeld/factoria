@@ -134,6 +134,22 @@ export const toolDefinitions = [
   {
     type: "function",
     function: {
+      name: "renameTopic",
+      description:
+        "Rename a Topic — change ONLY its Title (e.g. 'France' → 'French Republic'). Identify the Topic by its id from searchTopics or getTopic. This rewords the prompt of every Question derived from the Topic but keeps all Fields, their answers, and their review history intact (it never resets scheduling). Titles are unique per user, so the new Title must not already belong to another Topic. Use this for renames only; to change a Field's answer use a field tool instead.",
+      parameters: {
+        type: "object",
+        properties: {
+          topicId: { type: "string" },
+          newTitle: { type: "string", description: "the new Topic Title" },
+        },
+        required: ["topicId", "newTitle"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "setFieldTags",
       description:
         "Set the Tags on a specific Field (replaces its existing tags). Tags are free-form lowercase labels (e.g. 'hard', 'europe'). Identify the Field by topicId + fieldId, obtained from searchTopics or getTopic. Setting tags never changes review scheduling.",
@@ -243,6 +259,17 @@ export async function runTool(
       const title = String(args.title);
       const rawFields =
         (args.fields as { label: string; value: string }[]) ?? [];
+      // Each Field in a Topic is a distinct question, so labels must be unique
+      // within the Topic. Reject duplicates instead of silently creating useless
+      // duplicate prompts — the model sees this error and corrects the labels.
+      const dup = firstDuplicateLabel(rawFields.map((f) => f.label));
+      if (dup) {
+        return {
+          result: {
+            error: `Duplicate Field label "${dup}" in Topic "${title}". Each Field in a Topic must have a distinct label (e.g. "capital", "currency", "population") — they are separate questions. Re-send createTopic with unique labels.`,
+          },
+        };
+      }
       const fields = rawFields.map((f) => ({
         id: newFieldId(),
         label: f.label,
@@ -254,6 +281,35 @@ export async function runTool(
       return {
         result: { summary: `create Topic "${title}" with ${fields.length} fields` },
         pendingWrite: { kind: "createTopic", title, fields },
+      };
+    }
+
+    case "renameTopic": {
+      const topicId = String(args.topicId);
+      const toTitle = String(args.newTitle ?? "").trim();
+      if (!toTitle) return { result: { error: "New title is required." } };
+      let topic;
+      try {
+        topic = await getTopic(topicId);
+      } catch {
+        return { result: { error: `Topic ${topicId} not found.` } };
+      }
+      if (topic.title === toTitle) {
+        return {
+          result: { error: `Topic is already titled "${toTitle}".` },
+        };
+      }
+      return {
+        result: {
+          summary: `rename Topic "${topic.title}" → "${toTitle}"`,
+          note: "Keeps all fields and review history; only the prompt wording changes.",
+        },
+        pendingWrite: {
+          kind: "renameTopic",
+          topicId,
+          fromTitle: topic.title,
+          toTitle,
+        },
       };
     }
 
@@ -316,6 +372,22 @@ export async function runTool(
     default:
       return { result: { error: `Unknown tool: ${name}` } };
   }
+}
+
+/**
+ * First label that repeats in a list (case-insensitive, trimmed), or null if
+ * all are distinct. Used to reject same-label Fields within one Topic. Returns
+ * the label as originally written for a readable error.
+ */
+function firstDuplicateLabel(labels: string[]): string | null {
+  const seen = new Set<string>();
+  for (const raw of labels) {
+    const key = raw.trim().toLowerCase();
+    if (!key) continue;
+    if (seen.has(key)) return raw.trim();
+    seen.add(key);
+  }
+  return null;
 }
 
 /** Resolve a (topicId, fieldId) to its Topic Title and Field label. */

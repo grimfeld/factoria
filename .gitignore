@@ -36,6 +36,9 @@ dist-ssr
 *.jks
 *.keystore
 
+# graphify knowledge-graph output (generated, not committed)
+graphify-out/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

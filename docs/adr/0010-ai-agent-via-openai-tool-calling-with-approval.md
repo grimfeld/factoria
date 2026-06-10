@@ -92,4 +92,23 @@ app multi-user-safe: no per-device secret to leak.
   gate. Generated *answers* should be reviewable before drilling.
 - Offline/headless contexts (cron, no network) cannot use the agent; authoring
   by hand and the existing flows remain fully functional without it.
-- This ADR records architecture only; the agent is not yet implemented.
+
+## Follow-up: persisted conversations and an explicit plan
+
+Two refinements once the agent shipped:
+
+- **Conversations persist.** The Assistant page kept history only in React
+  state, so navigating away lost it. An owner-scoped `conversations` collection
+  (migration `1717545600_agent_conversations.js`) now stores the full
+  `ChatMessage[]` history and the selected import mode after every turn, behind
+  the same `@request.auth.id = owner` rule as all content (ADR-0002). The page
+  lists past conversations, **reopens** one to continue it, or **restarts** its
+  opening request in a fresh conversation. Un-approved pending writes are *not*
+  stored — they are a live, un-committed proposal tied to a turn, not durable
+  content; reopening starts with a clean approval surface.
+- **The plan is explicit.** Each pending write is rendered as a numbered,
+  plain-language step ("Create deck “Capitals”", "Add a “capital” field across
+  Topics — create 198 new Topic(s)") above the approval gate, and the loop emits
+  live activity ("Searching Topics…", "Planning import…") instead of a bare
+  spinner. This sits on top of the existing gate; the approval preview remains
+  the authoritative diff.

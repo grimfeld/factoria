@@ -18,6 +18,9 @@ export type PendingWrite =
   | { kind: "createDeck"; name: string; tempId: string }
   | { kind: "importFacts"; label: string; type: FieldType; plan: ImportPlan }
   | { kind: "createTopic"; title: string; fields: Field[] }
+  // Rename = Title change only. Keeps every Field, id, and Review state
+  // (ADR-0009 / CONTEXT.md) — it just rewords each Question's prompt.
+  | { kind: "renameTopic"; topicId: string; fromTitle: string; toTitle: string }
   | { kind: "addField"; topicId: string; topicTitle: string; field: Field }
   | {
       kind: "updateField";
@@ -58,4 +61,26 @@ export interface ToolCall {
   id: string;
   type: "function";
   function: { name: string; arguments: string };
+}
+
+/** The import mode the user picks for a turn (mirrors the /agent UI Select). */
+export type ImportMode = "create-missing" | "extend-only";
+
+/**
+ * A persisted Assistant conversation. The `messages` array is the full OpenAI
+ * history (system/user/assistant/tool) — the same shape {@link runAgentTurn}
+ * threads through — so reopening a conversation can continue it verbatim. The
+ * un-approved pending writes of any in-flight turn are NOT persisted (they are a
+ * live proposal, not durable content); reopening starts with a clean approval
+ * surface and the user re-asks to regenerate one.
+ */
+export interface Conversation {
+  id: string;
+  owner: string;
+  /** Short label for the history list, derived from the first user message. */
+  title: string;
+  messages: ChatMessage[];
+  mode: ImportMode;
+  created: string;
+  updated: string;
 }

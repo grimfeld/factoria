@@ -7,6 +7,7 @@ import type {
   Template,
   TemplateField,
 } from "@/domain/types";
+import type { ChatMessage, Conversation } from "@/lib/agent/types";
 
 /**
  * Translate PocketBase rows into domain entities. PB returns json fields
@@ -73,4 +74,16 @@ export function toDeck(row: RecordModel): Deck {
     name: row.name,
     fields: Array.isArray(row.fields) ? row.fields : [],
   };
+}
+
+export function toConversation(row: RecordModel): Conversation {
+  return {
+    id: row.id,
+    owner: row.owner,
+    title: row.title ?? "",
+    messages: Array.isArray(row.messages) ? (row.messages as ChatMessage[]) : [],
+    mode: row.mode === "extend-only" ? "extend-only" : "create-missing",
+    created: row.created,
+    updated: row.updated,
+  } satisfies Conversation;
 }
